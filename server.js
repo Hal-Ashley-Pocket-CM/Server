@@ -1,26 +1,18 @@
-const express = require('express');
-const app = express();
-/*
-//const db = require('C:/Users/hende/node-course/server/models');
-// Sequelize (capital) references the standard library
-const Sequelize = require("sequelize");
 
-// sequelize (lowercase) references our connection to the DB.
-const sequelize = require("./config/connection.js");
+const connection = require('./config/connection.js')();
 
-// const db = require('./Models/Client.js');
+var db = {
+    connection : connection,
+    caseManager : require('./models/CaseManager.js')(connection),
+    client : require('./models/Client.js')(connection),
+    courtDate : require('./models/CourtDate.js')(connection),
+    checkIn : require('./models/CheckIn.js')(connection),
+    message : require('./models/Message.js')(connection),
+};
 
-sequelize
-  .authenticate()
-  .then(() => {
-    console.log('Connection has been established successfully.');
-  })
-  .catch(err => {
-    console.error('Unable to connect to the database:', err);
-  });
-*/
+db.connection.sync({
+    logging: console.log,
+    force: true, 
+});
 
-require('./controlers/routes.js')(app);
-
-app.use(express.static('./public'))
-app.listen(4200, function(){ console.log('Server listening on 4200')});
+require('./controlers/routes.js')(db);

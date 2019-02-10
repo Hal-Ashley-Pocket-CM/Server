@@ -1,32 +1,44 @@
-// Sequelize (capital) references the standard library
 const Sequelize = require("sequelize");
 
-// sequelize (lowercase) references our connection to the DB.
-const sequelize = require("../config/connection.js");
+module.exports=function(connection){
 
-module.exports = (sequelize, DataTypes) => {
-  var Client = sequelize.define('Client', {
+const Client = connection.define('Client', {
   id: {
-    type: DataTypes.UUID,
-    primaryKey: true,
-    autoIncrement: true
+      type: Sequelize.UUID,
+      primaryKey: true,
+      defaultValue: Sequelize.UUIDV4,
   },
-  name: DataTypes.String,
-  phone: DataTypes.String,
-  courtDates: DataTypes.Array,
-  checkIns: DataTypes.Array,
-  messages: DataTypes.Array,
-  active: DataTypes.Boolean
-
-});
-
-Client.associate = function (models) {
-  models.Client.belongsTo(models.CaseManager, {
-  foreignKey: {
-    id: cmId
+  firstName: {
+      type: Sequelize.STRING,
+      validate: {
+          isAlpha: true,            // will only allow letters
+      }
+  },
+  lastName: {
+      type: Sequelize.STRING,
+      validate: {
+          isAlpha: true,            // will only allow letters
+      }
+  },
+  phone: {
+      type: Sequelize.STRING,
+  },
+  nextCourtDate: {
+      type: Sequelize.DATE,
+  },
+  lastCheckIn: {
+      type: Sequelize.DATE,
+      defaultValue: Sequelize.NOW,
+  },
+  lastMessage: {
+      type: Sequelize.TEXT,
+      defaultValue: 'Welcome to our office!',
+  },
+  active: {
+      type: Sequelize.ENUM('active', 'inactive'),
+      defaultValue: 'active',
   }
 });
 
 return Client;
-
-};
+}

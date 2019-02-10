@@ -1,32 +1,41 @@
-// Sequelize (capital) references the standard library
 const Sequelize = require("sequelize");
 
-// sequelize (lowercase) references our connection to the DB.
-const sequelize = require("../config/connection.js");
+module.exports=function(connection){
 
-module.exports = (sequelize, DataTypes) => {
-const CaseManager = sequelize.define('CaseManager', {
-cmId: {
-type: DataTypes.UUID,
-primaryKey: true,
-autoIncrement: true
-},
-name: DataTypes.String
-// email: {
-// type: DataTypes.String,
-// required: true,
-// unique: true
-// },
-// password: {
-// type: DataTypes.String,
-// required: true,
-// unique: true
-// }
+const CaseManager = connection.define('CaseManager', {
+    cmId: {
+        type: Sequelize.UUID,
+        primaryKey: true,
+        defaultValue: Sequelize.UUIDV4,
+    },
+    firstName: {
+        type: Sequelize.STRING,
+        validate: {
+            isAlpha: true,            // will only allow letters
+        }
+    },
+    lastName: {
+        type: Sequelize.STRING,
+        validate: {
+            isAlpha: true,            // will only allow letters
+        }
+    },
+    email: {
+        type: Sequelize.STRING,
+        required: true,
+        unique: true,
+        validate: {
+            isEmail: true,            // checks for email format (foo@bar.com)
+        },
+    },
+    phone: {
+        type: Sequelize.STRING,
+    },
+    // password: {
+    //     type: Sequelize.STRING,
+    //     required: true,
+    // }
 });
 
-CaseManager.associate = function(models) {
-models.CaseManager.hasMany(models.Client);
-};
-
-return CaseManager;
-};
+ return CaseManager;
+ };
