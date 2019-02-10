@@ -24,16 +24,13 @@ const Client = connection.define('Client', {
       type: Sequelize.STRING,
   },
   nextCourtDate: {
-      // type: Sequelize.ARRAY(Sequelize.DATE), // Defines an array. PostgreSQL only.
       type: Sequelize.DATE,
   },
   lastCheckIn: {
-      // type: Sequelize.ARRAY(Sequelize.DATE), // Defines an array. PostgreSQL only.
       type: Sequelize.DATE,
       defaultValue: Sequelize.NOW,
   },
   lastMessage: {
-      // type: Sequelize.ARRAY(Sequelize.TEXT), // Defines an array. PostgreSQL only.
       type: Sequelize.TEXT,
       defaultValue: 'Welcome to our office!',
   },
