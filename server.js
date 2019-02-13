@@ -12,7 +12,8 @@ var db = {
 
 db.connection.sync({
     logging: console.log,
-    force: true, 
+    //force: true, 
 });
+
 
 require('./controlers/routes.js')(db);

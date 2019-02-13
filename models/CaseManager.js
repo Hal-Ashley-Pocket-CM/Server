@@ -3,7 +3,7 @@ const Sequelize = require("sequelize");
 module.exports=function(connection){
 
 const CaseManager = connection.define('CaseManager', {
-    cmId: {
+    caseMgrId: {
         type: Sequelize.UUID,
         primaryKey: true,
         defaultValue: Sequelize.UUIDV4,

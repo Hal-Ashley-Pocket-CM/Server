@@ -8,6 +8,9 @@ module.exports=function(connection){
             primaryKey: true,
             defaultValue: Sequelize.UUIDV4,
         },
+        clientId: {
+            type: Sequelize.UUID,
+        },
         time : {
             type: Sequelize.DATE,
             defaultValue: Sequelize.NOW,
