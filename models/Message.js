@@ -8,14 +8,18 @@ module.exports=function(connection){
             primaryKey: true,
             defaultValue: Sequelize.UUIDV4,
         },
-        author: {
+        clientId: {
             type: Sequelize.UUID,
         },
-        recipient: {
+        caseMgrId: {
             type: Sequelize.UUID,
         },
         message: {
             type: Sequelize.TEXT,
+        },
+        timeStamp : {
+            type: Sequelize.DATE,
+            defaultValue: Sequelize.NOW,
         },
     });
 
