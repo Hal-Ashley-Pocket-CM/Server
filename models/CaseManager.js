@@ -3,11 +3,6 @@ const Sequelize = require("sequelize");
 module.exports=function(connection){
 
 const CaseManager = connection.define('CaseManager', {
-    caseMgrId: {
-        type: Sequelize.UUID,
-        primaryKey: true,
-        defaultValue: Sequelize.UUIDV4,
-    },
     firstName: {
         type: Sequelize.STRING,
         validate: {
