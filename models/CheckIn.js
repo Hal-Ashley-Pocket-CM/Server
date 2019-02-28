@@ -10,9 +10,11 @@ module.exports=function(connection){
             defaultValue: Sequelize.NOW,
         },
         lattitude:{
+            required: true,
             type: Sequelize.STRING,
         },
         longitude: {
+            required: true,
             type: Sequelize.STRING,
         }
     });
