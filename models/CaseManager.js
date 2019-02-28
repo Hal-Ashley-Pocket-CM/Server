@@ -1,3 +1,5 @@
+"use strict"
+
 const Sequelize = require("sequelize");
 
 module.exports=function(connection){
@@ -5,12 +7,14 @@ module.exports=function(connection){
 const CaseManager = connection.define('CaseManager', {
     firstName: {
         type: Sequelize.STRING,
+        required: true,
         validate: {
             isAlpha: true,            // will only allow letters
         }
     },
     lastName: {
         type: Sequelize.STRING,
+        required: true,
         validate: {
             isAlpha: true,            // will only allow letters
         }
@@ -25,6 +29,7 @@ const CaseManager = connection.define('CaseManager', {
     },
     phone: {
         type: Sequelize.STRING,
+        unique: true,
     },
     // password: {
     //     type: Sequelize.STRING,
