@@ -1,0 +1,50 @@
+== Info:   Trying ::1...
+== Info: TCP_NODELAY set
+== Info: Connected to localhost (::1) port 4200 (#0)
+=> Send header, 146 bytes (0x92)
+0000: GET /dash/all-clients HTTP/1.1
+0020: Host: localhost:4200
+0036: User-Agent: curl/7.55.1
+004f: Accept: */*
+005c: Content-Type: application/json
+007c: Content-Length: 57
+0090: 
+=> Send data, 57 bytes (0x39)
+0000: {\n\t"firstName" : "Earl",\n\t"lastName" : "Campbell"\n})
+== Info: upload completely sent off: 57 out of 57 bytes
+<= Recv header, 26 bytes (0x1a)
+0000: HTTP/1.1 400 Bad Request
+<= Recv header, 23 bytes (0x17)
+0000: X-Powered-By: Express
+<= Recv header, 45 bytes (0x2d)
+0000: Content-Security-Policy: default-src 'self'
+<= Recv header, 33 bytes (0x21)
+0000: X-Content-Type-Options: nosniff
+<= Recv header, 40 bytes (0x28)
+0000: Content-Type: text/html; charset=utf-8
+<= Recv header, 21 bytes (0x15)
+0000: Content-Length: 966
+<= Recv header, 37 bytes (0x25)
+0000: Date: Sun, 24 Feb 2019 05:42:23 GMT
+<= Recv header, 24 bytes (0x18)
+0000: Connection: keep-alive
+<= Recv header, 2 bytes (0x2)
+0000: 
+<= Recv data, 966 bytes (0x3c6)
+0000: <!DOCTYPE html>.<html lang="en">.<head>.<meta charset="utf-8">.<
+0040: title>Error</title>.</head>.<body>.<pre>SyntaxError: Unexpected 
+0080: token \ in JSON at position 1<br> &nbsp; &nbsp;at JSON.parse (&l
+00c0: t;anonymous&gt;)<br> &nbsp; &nbsp;at parse (C:\Users\hende\node-
+0100: course\Server\node_modules\body-parser\lib\types\json.js:89:19)<
+0140: br> &nbsp; &nbsp;at C:\Users\hende\node-course\Server\node_modul
+0180: es\body-parser\lib\read.js:121:18<br> &nbsp; &nbsp;at invokeCall
+01c0: back (C:\Users\hende\node-course\Server\node_modules\raw-body\in
+0200: dex.js:224:16)<br> &nbsp; &nbsp;at done (C:\Users\hende\node-cou
+0240: rse\Server\node_modules\raw-body\index.js:213:7)<br> &nbsp; &nbs
+0280: p;at IncomingMessage.onEnd (C:\Users\hende\node-course\Server\no
+02c0: de_modules\raw-body\index.js:273:7)<br> &nbsp; &nbsp;at Incoming
+0300: Message.emit (events.js:182:13)<br> &nbsp; &nbsp;at endReadableN
+0340: T (_stream_readable.js:1094:12)<br> &nbsp; &nbsp;at process._tic
+0380: kCallback (internal/process/next_tick.js:63:19)</pre>.</body>.</
+03c0: html>.
+== Info: Connection #0 to host localhost left intact
