@@ -128,45 +128,41 @@ module.exports=function(db){
   });
 
 /* --------------------------------------------------------------------------------------------------
-  // Creates a new client - TBD should this be a put 
+  // Creates a new client
   ---------------------------------------------------------------------------------------------------- */
   app.post('/dash/create-client', (req, res) => {
     if (req.body.firstName == null || req.body.lastName == null|| req.body.phone == null  || req.body.caseManagerFirstName == null || req.body.caseManagerLastName == null){
       res.send("Invalid Input");
     } else {
-      try {
-        CaseManager.findOne({
-          where : {
-            firstName : req.body.caseManagerFirstName,
-            lastName : req.body.caseManagerLastName,
-          },
-          attributes:['id']
-        })
-        .then (caseManager => {
+      CaseManager.findOne({
+        where : {
+          firstName : req.body.caseManagerFirstName,
+          lastName : req.body.caseManagerLastName,
+        },
+        attributes:['id']
+      })
+      .catch(err => {
+        res.send(err + " Failed to find Case Manager")
+      })
+      .then (caseManager => {
           if (caseManager != null){
-            try{
-              Client.create({
-                firstName: req.body.firstName,
-                lastName: req.body.lastName,
-                phone: req.body.phone,
-                CaseManagerId : caseManager.id
-              })
-              .then(() => {
-                res.send("Client " +req.body.firstName + " " + req.body.lastName + " Added");
-              });
-            }
-            catch(err){
-              res.send(err)
-            }
+            Client.create({
+              firstName: req.body.firstName,
+              lastName: req.body.lastName,
+              phone: req.body.phone,
+              CaseManagerId : caseManager.id
+            })
+            .catch(err => {
+              res.send(err + " Failed to create client " + req.body.firstName + " " + req.body.lastName);            
+            })
+            .then(() => {
+              res.send("Client " + req.body.firstName + " " + req.body.lastName + " Added");
+            });
           } else {
             res.send("Failed to find case manager " + req.body.caseManagerFirstName + " " + req.body.caseManagerLastName);
           }
         });
       }
-      catch(err){
-        res.send(err + " Failed to create client");
-      }
-    }
   });
 
 /* --------------------------------------------------------------------------------------------------
@@ -177,38 +173,34 @@ module.exports=function(db){
     if (req.body.firstName == null || req.body.lastName == null|| req.body.time == null || req.body.lattitude == null || req.body.longitude == null){
       res.send("Invalid Input");
     } else {
-      try {
-        Client.findOne({
-          where : {
-            firstName : req.body.firstName,
-            lastName : req.body.lastName,
-          },
-          attributes:['id']
-        })
-        .then (client => {
-          if (client != null){
-            try{
-              CheckIn.create({
-                time : req.body.time,
-                lattitude: req.body.lattitude,
-                longitude: req.body.longitude,
-                ClientId : client.id
-              })
-              .then(() => {
-                res.send("Check in for  " + req.body.firstName + " " + req.body.lastName + " added");
-              });
-            }
-            catch(err){
-              res.send(err)
-            }
-          } else {
-            res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
-          }
-        });
-      }
-      catch(err){
-        res.send(err + " Failed to add checkin");
-      }
+      Client.findOne({
+        where : {
+          firstName : req.body.firstName,
+          lastName : req.body.lastName,
+        },
+        attributes:['id']
+      })
+      .catch( err => {
+        res.send(err + " Failed to find client " + req.body.firstName + " " + req.body.lastName);
+      })
+      .then (client => {
+        if (client != null){
+          CheckIn.create({
+            time : req.body.time,
+            lattitude: req.body.lattitude,
+            longitude: req.body.longitude,
+            ClientId : client.id
+          })
+          .catch(err => {
+            res.send(err + " failed check in for " + req.body.firstName + " " + req.body.lastName)
+          })
+          .then(() => {
+            res.send("Check in for  " + req.body.firstName + " " + req.body.lastName + " added");
+          });
+        } else {
+          res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
+        }
+      });
     }
   });
 
@@ -219,63 +211,57 @@ module.exports=function(db){
     if (req.body.firstName == null || req.body.lastName == null || req.body.time == null|| req.body.place == null){
       res.send("Invalid Input");
     } else {
-      try {
-        Client.findOne({
-          where : {
-            firstName : req.body.firstName,
-            lastName : req.body.lastName,
-          },
-          attributes:['id']
-        })
-        .then (client => {
-          if (client != null){
-            try{
-              CourtDate.create({
-                time: req.body.time,
-                place: req.body.place,
-                ClientId : client.id
-              })
-              .then(() => {
-                res.send("Court Date for  " + req.body.firstName + " " + req.body.lastName + " added");
-              });
-            }
-            catch(err){
-              res.send(err)
-            }
-          } else {
-            res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
-          }
-        });
-      }
-      catch(err){
-        res.send(err + " Failed to add court date");
-      }
+      Client.findOne({
+        where : {
+          firstName : req.body.firstName,
+          lastName : req.body.lastName,
+        },
+        attributes:['id']
+      })
+      .catch( err => {
+        res.send(err + " Failed to find client " + req.body.firstName + " " + req.body.lastName);
+      })
+      .then (client => {
+        if (client != null){
+          CourtDate.create({
+            time: req.body.time,
+            place: req.body.place,
+            ClientId : client.id
+          })
+          .catch(err => {
+            res.send(err + " failed court date for " + req.body.firstName + " " + req.body.lastName)
+          })
+          .then(() => {
+            res.send("Court Date for  " + req.body.firstName + " " + req.body.lastName + " added");
+          });
+        } else {
+          res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
+        }
+      });
     }
   });
 
   /* --------------------------------------------------------------------------------------------------
-  // Creates a new case manager - TBD should this be a put 
+  // Creates a new case manager
   ---------------------------------------------------------------------------------------------------- */
   app.post('/dash/create-casemgr', (req, res) => {
     if (req.body.firstName == null || req.body.lastName == null || req.body.email == null || req.body.phone == null) {
       res.send("Invalid Input");
     } else {
-    try{
-        CaseManager.create({
-          firstName: req.body.firstName,
-          lastName: req.body.lastName,
-          phone: req.body.phone,
-          email: req.body.email,
+      CaseManager.create({
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        phone: req.body.phone,
+        email: req.body.email,
+      })
+      .catch(err => {
+        res.send(err + " failed create case manager " + req.body.firstName + " " + req.body.lastName)
       })
       .then(() => {
-        console.log("Case Manager " + req.body.firstName + " " + req.body.lastName + " Added");
-        res.send("Case Manager " +req.body.firstName + " " + req.body.lastName + " Added");
+        res.send("Case anager " +req.body.firstName + " " + req.body.lastName + " Added");
       });
     }
-    catch(err){
-      res.send(err + " Failed to create Case Manager");
-    }
-  }});
+  });
 
   /* --------------------------------------------------------------------------------------------------
   // Creates fake clients and case managers
@@ -355,4 +341,4 @@ module.exports=function(db){
   app.use(express.static('./public'))
   app.listen(4200, function(){ console.log('Server listening on 4200')});
 
-}
+} // export function end
