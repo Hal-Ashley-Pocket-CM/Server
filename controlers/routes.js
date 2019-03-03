@@ -2,12 +2,16 @@
 
 module.exports=function(db){
 
+  const My_Secret = "my secret";
+
   const Client = db.Client;
   const CaseManager = db.CaseManager;
   const CourtDate = db.CourtDate;
   const CheckIn = db.CheckIn;
   const Message = db.Message;
   
+  const jwt = require('jsonwebtoken');
+  const bcrypt = require('bcryptjs');
   const express = require('express');
   const app = express();
   app.use(express.json());
@@ -17,14 +21,132 @@ module.exports=function(db){
   });
 
   /* --------------------------------------------------------------------------------------------------
+  // Expects a email and password in request body
+  // Validates the password and returns a JWT
+  ---------------------------------------------------------------------------------------------------- */
+  app.get('/dash/login', function(req,res){
+    if (req.body.email == null || req.body.password == null){
+      res.send("Invalid Input");
+    } else {
+      CaseManager.findOne({
+        where : {email : req.body.email}
+      })
+      .catch(err => {
+        res.send(err + " Failed to find case manager");
+      })
+      .then (casemgr => {
+        var pwdValid = bcrypt.compareSync(req.body.password, casemgr.password);
+        if (!pwdValid) {
+          return res.status(401).send({ auth: false, token: null });
+        }
+        const expiration = 86400; // expires in 24 hours
+        var token = jwt.sign({ id: casemgr.id }, My_Secret, { expiresIn: expiration});
+        res.status(200).send({ auth: true, token: token });
+      })
+    }
+  })
+
+  /* --------------------------------------------------------------------------------------------------
+  // Expects a email, current password, and new password in request body
+  // Validates the current password and set the new password as the detabase password 
+  ---------------------------------------------------------------------------------------------------- */
+  app.get('/dash/change-password', function(req,res){
+    if (req.body.email == null || req.body.password == null || req.body.newPassword == null){
+      res.send("Invalid Input");
+    } else {
+      CaseManager.findOne({
+        where : {email : req.body.email}
+      })
+      .catch(err => {
+        res.send(err + " Failed to find case manager");
+      })
+      .then (casemgr => {
+        var pwdValid = bcrypt.compareSync(req.body.password, casemgr.password);
+        if (!pwdValid) {
+          res.status(401).send({ auth: false, token: null });
+        } else {
+          var hashedPassword = bcrypt.hashSync(req.body.newPassword, 8);
+          casemgr.update({
+            password: hashedPassword
+          })
+          .catch (err => {
+            res.send(err + " Failed to change password");
+          })
+          .then(() => {
+            res.send("Password Changed");
+          });
+        } 
+      })
+    }
+  })
+
+  /* --------------------------------------------------------------------------------------------------
+  // Doesn't do anything 
+  ---------------------------------------------------------------------------------------------------- */
+  app.get('/dash/logout', function(req, res) {
+    res.status(200).send({ auth: false, token: null });
+  });
+
+  /* --------------------------------------------------------------------------------------------------
+  // Expects a JWT for  a case manager in the header field x-access-token
+  // Returns all of the specified case manager's clients with their court dates, checkins, and messages
+  ---------------------------------------------------------------------------------------------------- */
+  app.get('/dash/all-clients', function(req, res){
+    var token = req.headers['x-access-token'];
+    if (!token) {
+      res.send("No token sent");
+    } else {
+      jwt.verify(token, My_Secret, function(err, decoded) {
+        if (err) {
+          res.send('Failed to authenticate token.');
+        }
+        else {
+          CaseManager.findOne({
+            where : {id : decoded.id},
+            attributes:['firstName', 'lastName', 'phone', 'email'], // Return CaseManager name, phone, & email
+            include: [{
+              model: Client,
+              attributes:['firstName', 'lastName', "phone"], // Return Client name & phone
+              include: [
+                {
+                  model: CourtDate,
+                  attributes:['time', 'place']  // Return Array of Client Court Dates
+                },
+                {
+                  model: CheckIn,
+                  attributes:['time', 'lattitude', 'longitude'] // Return Array of Client CheckIn
+                },
+                {
+                  model: Message,
+                  attributes:['message', 'timeStamp'] // Return Array of Client Messages
+                }
+              ]
+            },]
+          })
+          .catch(err => {
+            res.send(err + " Failed to find clients");
+          })
+          .then(clients => {
+            if (clients != null){
+              res.send(clients);
+            }
+            else{
+              res.send("Case manager: " + req.body.firstName + " " + req.body.lastName + " not found");
+            }
+          })
+        }
+      })
+    } 
+  })
+
+  /* --------------------------------------------------------------------------------------------------
   // Expects first name and last name of a case manager in the get request body
   // Returns all of the specified case manager's clients with their court dates, checkins, and messages
   ---------------------------------------------------------------------------------------------------- */
-  app.get('/dash/all-clients', function(req,res){
+  app.get('/dash/all-clients-old', function(req,res){
     if (req.body.firstName == null || req.body.lastName == null){
       res.send("Invalid Input");
     } else {
-    try{
       CaseManager.findOne({
         where : {
           firstName : req.body.firstName,
@@ -50,6 +172,9 @@ module.exports=function(db){
           ]
         },]
       })
+      .catch(err => {
+        res.send(err + " Failed to find clients");
+      })
       .then(clients => {
         if (clients != null){
           res.send(clients);
@@ -58,22 +183,16 @@ module.exports=function(db){
           res.send("Case manager: " + req.body.firstName + " " + req.body.lastName + " not found");
         }
       })
-    }
-    catch(err){
-      res.send(err + " Failed to find clients");
-    }
   }});
 
   /* --------------------------------------------------------------------------------------------------
-  // Expects first name and last name of a client  in the get request body
+  // Expects first name and last name of a client in the get request body
   // Returns the specified client's information, court dates, checkins, and messages
   ---------------------------------------------------------------------------------------------------- */
   app.get('/dash/get-client', function(req,res){
     if (req.body.firstName == null || req.body.lastName == null){
       res.send("Invalid Input");
     } else {
-    console.log('Get Client info for ' + req.body.firstName, req.body.lastName);
-    try{
       Client.findAll({
         where : {
           firstName : req.body.firstName,
@@ -95,36 +214,31 @@ module.exports=function(db){
           },
         ]
       })
+      .catch(err => {
+        res.send(err + " Failed to find client ");
+      })
       .then(client => {
         if (client == null) {
-          console.log("Failed to find client " + req.body.firstName + " " + req.body.lastName);
           res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
         } else {
           res.send(client);
         }
       })
-    }
-    catch(err){
-      console.log(err + " Failed to find client ");
-      res.send(err + " Failed to find client ");
-    }
-  }});
+    }});
 
   /* --------------------------------------------------------------------------------------------------
   // Returns all of the case manangers with phone and email
   ---------------------------------------------------------------------------------------------------- */
   app.get('/dash/all-casemgrs', function(req,res){
-    try{
-      CaseManager.findAll({
-        attributes:['firstName', 'lastName', 'phone', 'email','id'], // Return CaseManager name, phone, & email
-      })
-      .then(caseManagers => {
-        res.send(caseManagers);
-      });
-    }
-    catch(err){
-      res.send(err + " Failed to find client " + req.body.firstName + " " + req.body.lastName);
-    }
+    CaseManager.findAll({
+      attributes:['firstName', 'lastName', 'phone', 'email','id'], // Return CaseManager name, phone, & email
+    })
+  .catch(err => {
+    res.send(err + " Failed to find client " + req.body.firstName + " " + req.body.lastName);
+  })
+  .then(caseManagers => {
+      res.send(caseManagers);
+    });
   });
 
 /* --------------------------------------------------------------------------------------------------
@@ -146,11 +260,13 @@ module.exports=function(db){
       })
       .then (caseManager => {
           if (caseManager != null){
+            var hashedPassword = bcrypt.hashSync(req.body.password, 8);
             Client.create({
               firstName: req.body.firstName,
               lastName: req.body.lastName,
               phone: req.body.phone,
-              CaseManagerId : caseManager.id
+              password : hashedPassword,
+              CaseManagerId : caseManager.id,
             })
             .catch(err => {
               res.send(err + " Failed to create client " + req.body.firstName + " " + req.body.lastName);            
@@ -248,11 +364,13 @@ module.exports=function(db){
     if (req.body.firstName == null || req.body.lastName == null || req.body.email == null || req.body.phone == null) {
       res.send("Invalid Input");
     } else {
+      var hashedPassword = bcrypt.hashSync(req.body.password, 8);
       CaseManager.create({
         firstName: req.body.firstName,
         lastName: req.body.lastName,
         phone: req.body.phone,
         email: req.body.email,
+        password: hashedPassword
       })
       .catch(err => {
         res.send(err + " failed create case manager " + req.body.firstName + " " + req.body.lastName)
@@ -267,16 +385,17 @@ module.exports=function(db){
   // Creates fake clients and case managers
   ---------------------------------------------------------------------------------------------------- */
   app.post('/dash/fakeData', (req, res) => {
+    var hashedPassword = bcrypt.hashSync('password', 8);
     CaseManager.create({
-      firstName: 'Earl', lastName: 'Campbell', email: "tyrose34@cpu.com", phone: "555-343-3434",
+      firstName: 'Earl', lastName: 'Campbell', email: "tyrose34@cpu.com", phone: "555-343-3434", password : hashedPassword,
     });
     CaseManager.create({
-        firstName: 'Dan', lastName: 'Pastorini', email: "dan@cpu.com", phone: "555-777-7777",
+        firstName: 'Dan', lastName: 'Pastorini', email: "dan@cpu.com", phone: "555-777-7777", password : hashedPassword,
     });
 
     // Client Billy Sims
     Client.create({
-      firstName: 'Billy', lastName: 'Sims', phone:"555-200-2020",
+      firstName: 'Billy', lastName: 'Sims', phone:"555-200-2020", password : hashedPassword,
       CaseManagerId : 1,
     });
     CourtDate.create({
@@ -306,7 +425,7 @@ module.exports=function(db){
 
     // Client Billy "White Shoes" Johnson
     Client.create({
-      firstName: 'Billy', lastName: 'Johnson', phone:"555-200-2121",
+      firstName: 'Billy', lastName: 'Johnson', phone:"555-200-2121", password : hashedPassword,
       CaseManagerId : 1,
     });
     CourtDate.create({
