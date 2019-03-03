@@ -31,10 +31,10 @@ const CaseManager = connection.define('CaseManager', {
         type: Sequelize.STRING,
         unique: true,
     },
-    // password: {
-    //     type: Sequelize.STRING,
-    //     required: true,
-    // }
+    password: {
+        required: true,
+        type: Sequelize.STRING,
+    },
 });
 
  return CaseManager;

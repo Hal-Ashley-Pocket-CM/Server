@@ -18,6 +18,10 @@ const Client = connection.define('Client', {
         unique: true,
         type: Sequelize.STRING,
     },
+    password: {
+        required: true,
+        type: Sequelize.STRING,
+    },
     active: {
         type: Sequelize.ENUM('active', 'inactive'),
         defaultValue: 'active',
