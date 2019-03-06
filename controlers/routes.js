@@ -348,7 +348,7 @@ module.exports=function(db){
 // Add a new Court Date. Expects a client JWT
 ---------------------------------------------------------------------------------------------------- */
   app.post('/dash/add-courtdate', (req, res) => {
-    if (req.body.firstName == null || req.body.lastName == null || req.body.time == null|| req.body.place == null){
+    if (req.body.time == null|| req.body.place == null){
       res.send("Invalid Input");
     } else {
       const authzId = verifyToken(req.headers, CLIENT_TOKEN);
