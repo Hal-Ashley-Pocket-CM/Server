@@ -2,7 +2,9 @@
 
 module.exports=function(db){
 
-  const My_Secret = "my secret";
+  const MY_SECRET = "my secret";
+  const CASE_MANAGER_TOKEN = "CaseManager";
+  const CLIENT_TOKEN = "Client";
 
   const Client = db.Client;
   const CaseManager = db.CaseManager;
@@ -20,6 +22,30 @@ module.exports=function(db){
     res.send('Hello World Index');
   });
 
+  function verifyToken(headers, expectedType)
+  {
+    var authzId = 0;
+
+    var token = headers['x-access-token'];
+    if (token == null){
+      token = headers['authorization'];
+      if (token != null && token.startsWith('Bearer ')) {
+        // Remove Bearer from string
+        token = token.slice(7, token.length);
+      }
+    }
+       
+    if (token != null) {
+      jwt.verify(token, MY_SECRET, function(err, decoded) {
+        if (!err && decoded.type == expectedType) {
+          authzId = decoded.id
+        }
+      })
+    }
+
+    return authzId;
+  }
+
   /* --------------------------------------------------------------------------------------------------
   // Expects a email and password in request body
   // Validates the password and returns a JWT
@@ -28,25 +54,53 @@ module.exports=function(db){
     if (req.body.email == null || req.body.password == null){
       res.send("Invalid Input");
     } else {
+      // Check for Case Manager
       CaseManager.findOne({
         where : {email : req.body.email}
       })
-      .catch(err => {
-        res.send(err + " Failed to find case manager");
-      })
       .then (casemgr => {
-        var pwdValid = bcrypt.compareSync(req.body.password, casemgr.password);
-        if (!pwdValid) {
-          return res.status(401).send({ auth: false, token: null });
+        if (casemgr != null){
+          if (!bcrypt.compareSync(req.body.password, casemgr.password)) {
+            return res.status(401).send({ auth: false, token: null });
+          }
+          const expiration = 86400; // expires in 24 hours
+          var token = jwt.sign({ id: casemgr.id, type: CASE_MANAGER_TOKEN}, MY_SECRET, { expiresIn: expiration});
+          res.status(200).send({ auth: true, token: token });
+        } else {
+          res.send("Failed to find case manager");
         }
-        const expiration = 86400; // expires in 24 hours
-        var token = jwt.sign({ id: casemgr.id }, My_Secret, { expiresIn: expiration});
-        res.status(200).send({ auth: true, token: token });
       })
     }
   })
 
   /* --------------------------------------------------------------------------------------------------
+  // Expects a phone number and password in request body
+  // Validates the password and returns a JWT
+  ---------------------------------------------------------------------------------------------------- */
+  app.get('/dash/client-login', function(req,res){
+    if (req.body.phone == null || req.body.password == null){
+      res.send("Invalid Input");
+    } else {
+      // Check for Case Manager
+      Client.findOne({
+        where : {phone : req.body.phone}
+      })
+      .then (client => {
+        if (client != null){
+          if (!bcrypt.compareSync(req.body.password, client.password)) {
+            return res.status(401).send({ auth: false, token: null });
+          }
+          const expiration = 86400; // expires in 24 hours
+          var token = jwt.sign({ id: client.id, type: CLIENT_TOKEN}, MY_SECRET, { expiresIn: expiration});
+          res.status(200).send({ auth: true, token: token });
+        } else {
+          res.send("Failed to find client");
+        }
+      })
+    }
+  })
+
+/* --------------------------------------------------------------------------------------------------
   // Expects a email, current password, and new password in request body
   // Validates the current password and set the new password as the detabase password 
   ---------------------------------------------------------------------------------------------------- */
@@ -80,6 +134,40 @@ module.exports=function(db){
     }
   })
 
+/* --------------------------------------------------------------------------------------------------
+  // Expects a email, current password, and new password in request body
+  // Validates the current password and set the new password as the detabase password 
+  ---------------------------------------------------------------------------------------------------- */
+  app.get('/dash/client-change-password', function(req,res){
+    if (req.body.phone == null || req.body.password == null || req.body.newPassword == null){
+      res.send("Invalid Input");
+    } else {
+      Client.findOne({
+        where : {phone : req.body.phone}
+      })
+      .catch(err => {
+        res.send(err + " Failed to find client");
+      })
+      .then (client => {
+        var pwdValid = bcrypt.compareSync(req.body.password, client.password);
+        if (!pwdValid) {
+          res.status(401).send({ auth: false, token: null });
+        } else {
+          var hashedPassword = bcrypt.hashSync(req.body.newPassword, 8);
+          client.update({
+            password: hashedPassword
+          })
+          .catch (err => {
+            res.send(err + " Failed to change password");
+          })
+          .then(() => {
+            res.send("Password Changed");
+          });
+        } 
+      })
+    }
+  })
+
   /* --------------------------------------------------------------------------------------------------
   // Doesn't do anything 
   ---------------------------------------------------------------------------------------------------- */
@@ -88,74 +176,69 @@ module.exports=function(db){
   });
 
   /* --------------------------------------------------------------------------------------------------
-  // Expects a JWT for  a case manager in the header field x-access-token
   // Returns all of the specified case manager's clients with their court dates, checkins, and messages
+  // Expects a JWT for a case manager in the header field x-access-token
   ---------------------------------------------------------------------------------------------------- */
   app.get('/dash/all-clients', function(req, res){
-    var token = req.headers['x-access-token'];
-    if (!token) {
-      res.send("No token sent");
-    } else {
-      jwt.verify(token, My_Secret, function(err, decoded) {
-        if (err) {
-          res.send('Failed to authenticate token.');
-        }
-        else {
-          CaseManager.findOne({
-            where : {id : decoded.id},
-            attributes:['firstName', 'lastName', 'phone', 'email'], // Return CaseManager name, phone, & email
-            include: [{
-              model: Client,
-              attributes:['firstName', 'lastName', "phone"], // Return Client name & phone
-              include: [
-                {
-                  model: CourtDate,
-                  attributes:['time', 'place']  // Return Array of Client Court Dates
-                },
-                {
-                  model: CheckIn,
-                  attributes:['time', 'lattitude', 'longitude'] // Return Array of Client CheckIn
-                },
-                {
-                  model: Message,
-                  attributes:['message', 'timeStamp'] // Return Array of Client Messages
-                }
-              ]
-            },]
-          })
-          .catch(err => {
-            res.send(err + " Failed to find clients");
-          })
-          .then(clients => {
-            if (clients != null){
-              res.send(clients);
-            }
-            else{
-              res.send("Case manager: " + req.body.firstName + " " + req.body.lastName + " not found");
-            }
-          })
-        }
-      })
-    } 
+      const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
+      if (authzId == 0){
+        res.send('Invalid authenticate token');
+      }else{
+        CaseManager.findOne({
+          where : {id : authzId},
+          attributes:['firstName', 'lastName', 'phone', 'email'], // Return CaseManager name, phone, & email
+          include: [{
+            model: Client,
+            attributes:['firstName', 'lastName', "phone"], // Return Client name & phone
+            include: [
+              {
+                model: CourtDate,
+                attributes:['time', 'place']  // Return Array of Client Court Dates
+              },
+              {
+                model: CheckIn,
+                attributes:['time', 'lattitude', 'longitude'] // Return Array of Client CheckIn
+              },
+              {
+                model: Message,
+                attributes:['message', 'timeStamp'] // Return Array of Client Messages
+              }
+            ]
+          },]
+        })
+        .catch(err => {
+          res.send(err + " Failed to find case manager");
+        })
+        .then(clients => {
+          if (clients != null){
+            res.send(clients);
+          }
+          else{
+            res.send(err + " Failed to find case manager");
+          }
+        })
+      }
   })
 
+  
   /* --------------------------------------------------------------------------------------------------
-  // Expects first name and last name of a case manager in the get request body
-  // Returns all of the specified case manager's clients with their court dates, checkins, and messages
+  // Returns the specified client's information, court dates, checkins, and messages
+  // Expects case manager JWT, first name and last name of a client in the get request body
   ---------------------------------------------------------------------------------------------------- */
-  app.get('/dash/all-clients-old', function(req,res){
+  app.get('/dash/get-client', function(req,res){
     if (req.body.firstName == null || req.body.lastName == null){
       res.send("Invalid Input");
     } else {
-      CaseManager.findOne({
-        where : {
-          firstName : req.body.firstName,
-          lastName : req.body.lastName,
-        },
-        attributes:['firstName', 'lastName', 'phone', 'email'], // Return CaseManager name, phone, & email
-        include: [{
-          model: Client,
-          attributes:['firstName', 'lastName', "phone"], // Return Client name & phone
+      const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
+      if (authzId == 0){
+        res.send('Invalid authenticate token');
+      } else {
+        Client.findAll({
+          where : {
+            firstName : req.body.firstName,
+            lastName : req.body.lastName,
+          },
+          attributes:['firstName', 'lastName', 'phone', 'CaseManagerId'], // Return Client name & phone
           include: [
             {
               model: CourtDate,
@@ -168,216 +251,151 @@ module.exports=function(db){
             {
               model: Message,
               attributes:['message', 'timeStamp'] // Return Array of Client Messages
-            }
+            },
           ]
-        },]
-      })
-      .catch(err => {
-        res.send(err + " Failed to find clients");
-      })
-      .then(clients => {
-        if (clients != null){
-          res.send(clients);
-        }
-        else{
-          res.send("Case manager: " + req.body.firstName + " " + req.body.lastName + " not found");
-        }
-      })
-  }});
+        })
+        .catch(err => {
+          res.send(err + " Failed to find client ");
+        })
+        .then(client => {
+          if (client == null) {
+            res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
+          } else {
+            res.send(client);
+          }
+        })
+      }
+    }
+  })
 
   /* --------------------------------------------------------------------------------------------------
-  // Expects first name and last name of a client in the get request body
-  // Returns the specified client's information, court dates, checkins, and messages
-  ---------------------------------------------------------------------------------------------------- */
-  app.get('/dash/get-client', function(req,res){
-    if (req.body.firstName == null || req.body.lastName == null){
-      res.send("Invalid Input");
-    } else {
-      Client.findAll({
-        where : {
-          firstName : req.body.firstName,
-          lastName : req.body.lastName,
-        },
-        attributes:['firstName', 'lastName', 'phone', 'CaseManagerId'], // Return Client name & phone
-        include: [
-          {
-            model: CourtDate,
-            attributes:['time', 'place']  // Return Array of Client Court Dates
-          },
-          {
-            model: CheckIn,
-            attributes:['time', 'lattitude', 'longitude'] // Return Array of Client CheckIn
-          },
-          {
-            model: Message,
-            attributes:['message', 'timeStamp'] // Return Array of Client Messages
-          },
-        ]
-      })
-      .catch(err => {
-        res.send(err + " Failed to find client ");
-      })
-      .then(client => {
-        if (client == null) {
-          res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
-        } else {
-          res.send(client);
-        }
-      })
-    }});
-
-  /* --------------------------------------------------------------------------------------------------
-  // Returns all of the case manangers with phone and email
+  // Returns all of the case manangers with phone and email.  Expects the JWT of a case manager. 
   ---------------------------------------------------------------------------------------------------- */
   app.get('/dash/all-casemgrs', function(req,res){
-    CaseManager.findAll({
-      attributes:['firstName', 'lastName', 'phone', 'email','id'], // Return CaseManager name, phone, & email
-    })
-  .catch(err => {
-    res.send(err + " Failed to find client " + req.body.firstName + " " + req.body.lastName);
-  })
-  .then(caseManagers => {
-      res.send(caseManagers);
-    });
-  });
-
-/* --------------------------------------------------------------------------------------------------
-  // Creates a new client
-  ---------------------------------------------------------------------------------------------------- */
-  app.post('/dash/create-client', (req, res) => {
-    if (req.body.firstName == null || req.body.lastName == null|| req.body.phone == null  || req.body.caseManagerFirstName == null || req.body.caseManagerLastName == null){
-      res.send("Invalid Input");
+    const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
+    if (authzId == 0){
+      res.send('Invalid authenticate token');
     } else {
-      CaseManager.findOne({
-        where : {
-          firstName : req.body.caseManagerFirstName,
-          lastName : req.body.caseManagerLastName,
-        },
-        attributes:['id']
+      CaseManager.findAll({
+        attributes:['firstName', 'lastName', 'phone', 'email'], // Return CaseManager name, phone, & email
       })
       .catch(err => {
-        res.send(err + " Failed to find Case Manager")
+        res.send(err + " Failed to find case managers");
       })
-      .then (caseManager => {
-          if (caseManager != null){
-            var hashedPassword = bcrypt.hashSync(req.body.password, 8);
-            Client.create({
-              firstName: req.body.firstName,
-              lastName: req.body.lastName,
-              phone: req.body.phone,
-              password : hashedPassword,
-              CaseManagerId : caseManager.id,
-            })
-            .catch(err => {
-              res.send(err + " Failed to create client " + req.body.firstName + " " + req.body.lastName);            
-            })
-            .then(() => {
-              res.send("Client " + req.body.firstName + " " + req.body.lastName + " Added");
-            });
-          } else {
-            res.send("Failed to find case manager " + req.body.caseManagerFirstName + " " + req.body.caseManagerLastName);
-          }
-        });
-      }
+      .then(caseManagers => {
+        res.send(caseManagers);
+      });
+    }
   });
-
+ 
 /* --------------------------------------------------------------------------------------------------
-// Add a new Checkin
----------------------------------------------------------------------------------------------------- */
-  app.post('/dash/add-checkin', (req, res) => {
-    console.log(req.body)
-    if (req.body.firstName == null || req.body.lastName == null|| req.body.time == null || req.body.lattitude == null || req.body.longitude == null){
+  // Creates a new client. Expects a case manager JWT
+  ---------------------------------------------------------------------------------------------------- */
+  app.post('/dash/create-client', (req, res) => {
+    if (req.body.firstName == null || req.body.lastName == null|| req.body.phone == null){
       res.send("Invalid Input");
     } else {
-      Client.findOne({
-        where : {
-          firstName : req.body.firstName,
-          lastName : req.body.lastName,
-        },
-        attributes:['id']
-      })
-      .catch( err => {
-        res.send(err + " Failed to find client " + req.body.firstName + " " + req.body.lastName);
-      })
-      .then (client => {
-        if (client != null){
-          CheckIn.create({
-            time : req.body.time,
-            lattitude: req.body.lattitude,
-            longitude: req.body.longitude,
-            ClientId : client.id
-          })
-          .catch(err => {
-            res.send(err + " failed check in for " + req.body.firstName + " " + req.body.lastName)
-          })
-          .then(() => {
-            res.send("Check in for  " + req.body.firstName + " " + req.body.lastName + " added");
-          });
-        } else {
-          res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
-        }
-      });
+      const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
+      if (authzId == 0){
+        res.send('Invalid authenticate token');
+      }else{
+        var hashedPassword = bcrypt.hashSync(req.body.password, 8);
+        Client.create({
+          firstName: req.body.firstName,
+          lastName: req.body.lastName,
+          phone: req.body.phone,
+          password : hashedPassword,
+          CaseManagerId : authzId,
+        })
+        .catch(err => {
+          res.send(err + " Failed to create client " + req.body.firstName + " " + req.body.lastName);            
+        })
+        .then(() => {
+          res.send("Client " + req.body.firstName + " " + req.body.lastName + " Added");
+        })
+      }
     }
   });
 
 /* --------------------------------------------------------------------------------------------------
-// Add a new Court Date
+// Add a new Checkin. Expects a client JWT
 ---------------------------------------------------------------------------------------------------- */
-  app.post('/dash/add-courtdate', (req, res) => {
-    if (req.body.firstName == null || req.body.lastName == null || req.body.time == null|| req.body.place == null){
+  app.post('/dash/add-checkin', (req, res) => {
+    if (req.body.time == null || req.body.lattitude == null || req.body.longitude == null){
       res.send("Invalid Input");
     } else {
-      Client.findOne({
-        where : {
-          firstName : req.body.firstName,
-          lastName : req.body.lastName,
-        },
-        attributes:['id']
-      })
-      .catch( err => {
-        res.send(err + " Failed to find client " + req.body.firstName + " " + req.body.lastName);
-      })
-      .then (client => {
-        if (client != null){
-          CourtDate.create({
-            time: req.body.time,
-            place: req.body.place,
-            ClientId : client.id
-          })
-          .catch(err => {
-            res.send(err + " failed court date for " + req.body.firstName + " " + req.body.lastName)
-          })
-          .then(() => {
-            res.send("Court Date for  " + req.body.firstName + " " + req.body.lastName + " added");
-          });
-        } else {
-          res.send("Failed to find client " + req.body.firstName + " " + req.body.lastName);
-        }
-      });
+      const authzId = verifyToken(req.headers, CLIENT_TOKEN);
+      if (authzId == 0){
+        res.send('Invalid authenticate token');
+      }else{
+        CheckIn.create({
+          time : req.body.time,
+          lattitude: req.body.lattitude,
+          longitude: req.body.longitude,
+          ClientId : authzId
+        })
+        .catch(err => {
+          res.send(err + " failed check in ")
+        })
+        .then(() => {
+          res.send("Check in for added");
+        });
+      };
+    }
+  });
+
+/* --------------------------------------------------------------------------------------------------
+// Add a new Court Date. Expects a client JWT
+---------------------------------------------------------------------------------------------------- */
+  app.post('/dash/add-courtdate', (req, res) => {
+    if (req.body.time == null|| req.body.place == null){
+      res.send("Invalid Input");
+    } else {
+      const authzId = verifyToken(req.headers, CLIENT_TOKEN);
+      if (authzId == 0){
+        res.send('Invalid authenticate token');
+      }else{
+        CourtDate.create({
+          time: req.body.time,
+          place: req.body.place,
+          ClientId :authzId
+        })
+        .catch(err => {
+          res.send(err + " failed create court date ")
+        })
+        .then(() => {
+          res.send("Court date created");
+        });
+      };
     }
   });
 
   /* --------------------------------------------------------------------------------------------------
-  // Creates a new case manager
+  // Creates a new case manager.  Expects a case manager JWT
   ---------------------------------------------------------------------------------------------------- */
   app.post('/dash/create-casemgr', (req, res) => {
     if (req.body.firstName == null || req.body.lastName == null || req.body.email == null || req.body.phone == null) {
       res.send("Invalid Input");
     } else {
-      var hashedPassword = bcrypt.hashSync(req.body.password, 8);
-      CaseManager.create({
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        phone: req.body.phone,
-        email: req.body.email,
-        password: hashedPassword
-      })
-      .catch(err => {
-        res.send(err + " failed create case manager " + req.body.firstName + " " + req.body.lastName)
-      })
-      .then(() => {
-        res.send("Case anager " +req.body.firstName + " " + req.body.lastName + " Added");
-      });
+      const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
+      if (authzId == 0){
+        res.send('Invalid authenticate token');        
+      }else{
+        var hashedPassword = bcrypt.hashSync(req.body.password, 8);
+        CaseManager.create({
+          firstName: req.body.firstName,
+          lastName: req.body.lastName,
+          phone: req.body.phone,
+          email: req.body.email,
+          password: hashedPassword
+        })
+        .catch(err => {
+          res.send(err + " failed create case manager " + req.body.firstName + " " + req.body.lastName)
+        })
+        .then(() => {
+          res.send("Case manager " + req.body.firstName + " " + req.body.lastName + " Added");
+        });
+      }
     }
   });
 
