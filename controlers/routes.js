@@ -3,8 +3,8 @@
 module.exports=function(db){
 
   const MY_SECRET = "my secret";
-  const CASE_MANAGER_TOKEN = "CaseManager";
-  const CLIENT_TOKEN = "Client";
+  const CASE_MANAGER_ROLE = "CaseManager";
+  const CLIENT_ROLE = "Client";
 
   const Client = db.Client;
   const CaseManager = db.CaseManager;
@@ -22,9 +22,10 @@ module.exports=function(db){
     res.send('Hello World Index');
   });
 
-  function verifyToken(headers, expectedType)
+  
+  function verifyToken(headers)
   {
-    var authzId = 0;
+    var returnInfo = { error : 400, sub : 0, role : "" };
 
     var token = headers['x-access-token'];
     if (token == null){
@@ -36,17 +37,20 @@ module.exports=function(db){
     }
        
     if (token != null) {
-      jwt.verify(token, MY_SECRET, function(err, decoded) {
-        if (!err && decoded.type == expectedType) {
-          authzId = decoded.id
-        }
-      })
+      try{
+        var decoded = jwt.verify(token, MY_SECRET);
+        returnInfo.error = 0;
+        returnInfo.role = decoded.role;
+        returnInfo.sub = decoded.sub;
+      }catch(err) {
+        returnInfo.error = 401; // unauthorized
+      }
     }
 
-    return authzId;
+    return returnInfo;
   }
 
-  /* --------------------------------------------------------------------------------------------------
+/* --------------------------------------------------------------------------------------------------
   // Expects a email and password in request body
   // Validates the password and returns a JWT
   ---------------------------------------------------------------------------------------------------- */
@@ -68,7 +72,7 @@ module.exports=function(db){
     
       // Generate and return JWT
       const expiration = 86400; // expires in 24 hours
-      var token = jwt.sign({ id: casemgr.id, type: CASE_MANAGER_TOKEN}, MY_SECRET, { expiresIn: expiration});
+      var token = jwt.sign({ sub: casemgr.id, role: CASE_MANAGER_ROLE}, MY_SECRET, { expiresIn: expiration});
       res.send({ auth: true, token: token });
     })
   })
@@ -95,7 +99,7 @@ module.exports=function(db){
     
       // Generate and return JWT
       const expiration = 86400; // expires in 24 hours
-      var token = jwt.sign({ id: client.id, type: CLIENT_TOKEN}, MY_SECRET, { expiresIn: expiration});
+      var token = jwt.sign({ sub: client.id, role: CLIENT_ROLE}, MY_SECRET, { expiresIn: expiration});
       res.send({ auth: true, token: token });
     })
   })
@@ -115,6 +119,8 @@ module.exports=function(db){
     })
     .then (casemgr => {
 
+      var status = 200;
+
       // If email not found or password doesn't match send Unauthorized respose
       if (casemgr == null || bcrypt.compareSync(req.body.password, casemgr.password) == false){
         return res.sendStatus(401);
@@ -125,10 +131,11 @@ module.exports=function(db){
         password: hashedPassword
       })
       .catch (err => {
-        return(err);
+        console.log(err);
+        status = 400;
       })
       .then(() => {
-        return res.sendStatus(200);
+        return res.sendStatus(status);
       });
     }) 
   })
@@ -152,16 +159,18 @@ module.exports=function(db){
       if (client == null || bcrypt.compareSync(req.body.password, client.password) == false){
         return res.sendStatus(401);
       }
-
+      
+      var status = 200;
       var hashedPassword = bcrypt.hashSync(req.body.newPassword, 8);
       client.update({
         password: hashedPassword
       })
       .catch (err => {
-        return(err);
+        console.log(err);
+        status = 400;
       })
       .then(() => {
-        return res.sendStatus(200);
+        return res.sendStatus(status);
       });
     })
   }) 
@@ -178,10 +187,17 @@ module.exports=function(db){
   // Expects a JWT for a case manager in the header field x-access-token
   ---------------------------------------------------------------------------------------------------- */
   app.get('/dash/all-clients', function(req, res){
-    const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
-    if (authzId == 0){
+    const tokenInfo = verifyToken(req.headers)
+    if (tokenInfo.error){
+      return res.sendStatus(tokenInfo.error);
+    }
+
+    if (tokenInfo.role != CASE_MANAGER_ROLE){
       return res.sendStatus(401); // not authorized 
     }
+
+    var status = 200;
+    const authzId = tokenInfo.sub;
 
     // Find case manager and associated clients
     CaseManager.findOne({
@@ -207,11 +223,16 @@ module.exports=function(db){
       }]
     })
     .catch(err => {
-      return res.sendStatus(err);
+      console.log(err);
+      status = 400;
     })
     .then(clients => {
       if (clients == null){
-        return res.sendStatus(204); // No content
+        status = 204; // No content
+      }
+      
+      if (status != 200){
+        return sendStatus(status);
       }
       else{
         return res.send(clients);
@@ -229,17 +250,24 @@ module.exports=function(db){
       return res.sendStatus(400); // bad request
     }
 
-    const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
-    if (authzId == 0){
+    const tokenInfo = verifyToken(req.headers)
+    if (tokenInfo.error){
+      return res.sendStatus(tokenInfo.error);
+    }
+
+    if (tokenInfo.role != CASE_MANAGER_ROLE){
       return res.sendStatus(401); // not authorized 
     }
+
+    const authzId = tokenInfo.sub;
 
     Client.findAll({
       where : {
         firstName : req.body.firstName,
         lastName : req.body.lastName,
+        CaseManagerId : authzId
       },
-      attributes:['firstName', 'lastName', 'phone', 'CaseManagerId'], // Return Client name & phone
+      attributes:['firstName', 'lastName', 'phone'], // Return Client name & phone
       include: [
         {
           model: CourtDate,
@@ -255,9 +283,6 @@ module.exports=function(db){
         },
       ]
     })
-    .catch(err => {
-      return res.sendStatus(err);
-    })
     .then(client => {
       if (client == null){
         return res.sendStatus(204); // No content
@@ -272,16 +297,17 @@ module.exports=function(db){
   // Returns all of the case manangers with phone and email.  Expects the JWT of a case manager. 
   ---------------------------------------------------------------------------------------------------- */
   app.get('/dash/all-casemgrs', function(req, res){
-    const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
-    if (authzId == 0){
+    const tokenInfo = verifyToken(req.headers)
+    if (tokenInfo.error){
+      return res.sendStatus(tokenInfo.error);
+    }
+
+    if (tokenInfo.role != CASE_MANAGER_ROLE){
       return res.sendStatus(401); // not authorized 
     }
 
     CaseManager.findAll({
       attributes:['firstName', 'lastName', 'phone', 'email'], // Return CaseManager name, phone, & email
-    })
-    .catch(err => {
-      return res.sendStatus(err);
     })
     .then(caseManagers => {
       res.send(caseManagers);
@@ -296,10 +322,17 @@ module.exports=function(db){
       return res.sendStatus(400); // bad request
     }
 
-    const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
-    if (authzId == 0){
+    const tokenInfo = verifyToken(req.headers)
+    if (tokenInfo.error){
+      return res.sendStatus(tokenInfo.error);
+    }
+
+    if (tokenInfo.role != CASE_MANAGER_ROLE){
       return res.sendStatus(401); // not authorized 
     }
+
+    var status = 200;
+    const authzId = tokenInfo.sub;
      
     var hashedPassword = bcrypt.hashSync(req.body.password, 8);
     Client.create({
@@ -310,10 +343,11 @@ module.exports=function(db){
       CaseManagerId : authzId,
     })
     .catch(err => {
-      return res.sendStatus(err);
+      console.log(err.name);
+      status = 409;
     })
     .then(() => {
-      return res.sendStatus(200);
+      return res.sendStatus(status);
     })
   });
 
@@ -325,10 +359,17 @@ module.exports=function(db){
       return res.sendStatus(400); // bad request
     }
 
-    const authzId = verifyToken(req.headers, CLIENT_TOKEN);
-    if (authzId == 0){
+    const tokenInfo = verifyToken(req.headers)
+    if (tokenInfo.error){
+      return res.sendStatus(tokenInfo.error);
+    }
+
+    if (tokenInfo.role != CLIENT_ROLE){
       return res.sendStatus(401); // not authorized 
     }
+
+    const authzId = tokenInfo.sub;
+    var status = 200;
 
     CheckIn.create({
       time : req.body.time,
@@ -337,11 +378,13 @@ module.exports=function(db){
       ClientId : authzId
     })
     .catch(err => {
-      return res.sendStatus(err);
+      console.log(err);
+      status = 400;
     })
     .then(() => {
-      return res.sendStatus(200);
-    });
+      return res.sendStatus(status);
+    })
+
   });
 
 /* --------------------------------------------------------------------------------------------------
@@ -352,10 +395,17 @@ module.exports=function(db){
       return res.sendStatus(400); // bad request
     }
 
-    const authzId = verifyToken(req.headers, CLIENT_TOKEN);
-    if (authzId == 0){
+    const tokenInfo = verifyToken(req.headers)
+    if (tokenInfo.error){
+      return res.sendStatus(tokenInfo.error);
+    }
+
+    if (tokenInfo.role != CLIENT_ROLE){
       return res.sendStatus(401); // not authorized 
     }
+
+    var status = 200;
+    const authzId = tokenInfo.sub;
 
     CourtDate.create({
       time: req.body.time,
@@ -363,10 +413,11 @@ module.exports=function(db){
       ClientId :authzId
     })
     .catch(err => {
-      return res.sendStatus(err);
+      console.log(err);
+      status = 400;
     })
     .then(() => {
-      return res.sendStatus(200);
+      return res.sendStatus(status);
     });
   });
 
@@ -378,11 +429,16 @@ module.exports=function(db){
       return res.sendStatus(400); // bad request
     }
 
-    const authzId = verifyToken(req.headers, CASE_MANAGER_TOKEN);
-    if (authzId == 0){
+    var tokenInfo = verifyToken(req.headers)
+    if (tokenInfo.error){
+      return res.sendStatus(tokenInfo.error);
+    }
+
+    if (tokenInfo.role != CASE_MANAGER_ROLE){
       return res.sendStatus(401); // not authorized 
     }
 
+    var status = 200;
     var hashedPassword = bcrypt.hashSync(req.body.password, 8);
     CaseManager.create({
       firstName: req.body.firstName,
@@ -392,10 +448,11 @@ module.exports=function(db){
       password: hashedPassword
     })
     .catch(err => {
-      return res.sendStatus(err);
+      console.log(err.name);
+      status = 409;
     })
     .then(() => {
-      return res.sendStatus(200);
+      return res.sendStatus(status);
     });
   });
 
